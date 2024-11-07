@@ -1,0 +1,129 @@
+<!-- static/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD-InsightBot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000; /* Black background */
+            color: #fff; /* White text */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat {
+            background: #1e1e1e; /* Dark gray background for chat */
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            width: 80%; /* Occupy 80% of the page */
+            max-width: 600px; /* Max width for larger screens */
+            overflow: hidden;
+        }
+        h1 {
+            text-align: center;
+            color: #fff; /* White text */
+        }
+        #messages {
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #444; /* Darker border */
+            border-radius: 4px;
+            padding: 10px;
+            background-color: #2a2a2a; /* Slightly lighter gray */
+        }
+        .message {
+            margin: 5px 0;
+        }
+        .user {
+            color: #ff3c00; /* Light blue for user messages */
+        }
+        .bot {
+            color: #c6e2dc; /* Lime green for bot messages */
+        }
+        #question {
+            width: calc(100% - 90px);
+            padding: 10px;
+            border: 1px solid #444; /* Darker border */
+            border-radius: 4px;
+            background-color: #333; /* Darker input background */
+            color: #fff; /* White text */
+        }
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff; /* Blue button */
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3; /* Darker blue on hover */
+        }
+    </style>
+</head>
+<body>
+    <div id="chat">
+        <h1>SD-InsightBot</h1>
+        <div id="messages"></div>
+        <div style="display: flex;">
+            <input type="text" id="question" placeholder="Ask your question here..." />
+            <button onclick="askQuestion()">Ask</button>
+        </div>
+    </div>
+
+    <script>
+        async function askQuestion() {
+            const questionInput = document.getElementById("question");
+            const question = questionInput.value.trim();
+            const messagesDiv = document.getElementById("messages");
+
+            if (question === "") return; // Prevent empty submissions
+
+            // Display the user's question
+            const userMessage = document.createElement("div");
+            userMessage.className = "message user";
+            userMessage.innerText = "You: " + question;
+            messagesDiv.appendChild(userMessage);
+
+            // Clear the input box
+            questionInput.value = "";
+
+            // Send the question to the server
+            const response = await fetch("/ask", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ question })
+            });
+
+            const data = await response.json();
+
+            // Display the bot's answer
+            const botMessage = document.createElement("div");
+            botMessage.className = "message bot";
+            botMessage.innerText = "Bot: " + data.answer;
+            messagesDiv.appendChild(botMessage);
+
+            // Scroll to the bottom of the messages
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Add event listener for Enter key
+        document.getElementById("question").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                askQuestion();
+            }
+        });
+    </script>
+</body>
+</html>

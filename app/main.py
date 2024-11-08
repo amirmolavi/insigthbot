@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from chatbot import Chatbot
+from app.chatbot import Chatbot
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles

@@ -27,8 +27,9 @@ async def read_index():
 async def ask_question(request: Request):
     data = await request.json()
     question = data.get("question")
-    answer = chatbot.get_response(question)
-    return {"answer": answer}
+    answer, relevant_files = chatbot.get_response(question)
+
+    return {"answer": answer, "relevant_files": relevant_files}
 
 
 if __name__ == "__main__":

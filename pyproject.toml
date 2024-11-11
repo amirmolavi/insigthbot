@@ -18,6 +18,7 @@ htmx = "~0.0.0"
 docx = "~0.2.4"
 isort = "~5.13.2"
 scikit-learn = "~1.5.2"
+ordered-set = "^4.1.0"
 
 
 [tool.poetry.group.dev.dependencies]

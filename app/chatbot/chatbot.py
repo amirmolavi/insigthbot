@@ -6,9 +6,11 @@ import openai
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
+from ordered_set import OrderedSet
 
-system_prompt = "You are an assistant that analyzes the content of some word files. \
-These are general knowledge and onboarding documents. Your job is to answer questions from users. If you don't know the answer, just say so."
+system_prompt = "You are an assistant that analyzes the content of word files containing how-to guides. \
+These are general knowledge and onboarding documents. Your job is to answer questions from users and give them \
+itemized instructions whenever applicable. If you don't know the answer, just say so."
 
 class Chatbot:
     def __init__(self, word_files_path):
@@ -42,7 +44,12 @@ class Chatbot:
         # Select relevant entries based on the question
         relevant_entries, relevant_filenames = self.select_relevant_entries(question)
 
-        # If no relevant entries are found, return a generic response without filenames
+        # If no relevant entries are found but relevant filenames are present
+        if not relevant_entries and relevant_filenames:
+            return ("I couldn't find a specific answer, but the following files may contain relevant information:", 
+                    relevant_filenames)
+
+        # If no relevant entries or filenames are found
         if not relevant_entries:
             return "I'm here to help! Please ask a specific question.", []
 
@@ -70,16 +77,16 @@ class Chatbot:
         cosine_similarities = (vectors * vectors[-1].T).toarray()[:-1, -1]
 
         # Get indices of entries with cosine similarity above a certain threshold
-        threshold = 0.1  # Set an appropriate threshold for relevance
+        threshold = 0.2  # Set an appropriate threshold for relevance
         relevant_indices = [i for i, score in enumerate(cosine_similarities) if score > threshold]
 
         # If no entries are above the threshold, return empty lists
         if not relevant_indices:
             return [], []
 
-        # Otherwise, get the most relevant entries
-        top_indices = np.argsort(cosine_similarities)[-5:]  # Adjust the number as needed
+        # Get top relevant entries by cosine similarity
+        top_indices = np.argsort(cosine_similarities)[-20:]  # Adjust the number as needed
         relevant_entries = [self.knowledge_base[i][0] for i in top_indices]
-        relevant_filenames = [self.knowledge_base[i][1] for i in top_indices]
+        relevant_filenames = list(OrderedSet([self.knowledge_base[i][1] for i in top_indices]))
 
         return relevant_entries, relevant_filenames

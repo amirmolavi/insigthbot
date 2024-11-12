@@ -1,21 +1,27 @@
 __all__ = ["Chatbot"]
-from dataclasses import dataclass
-import os
 
+import os
+import uuid  # Import uuid to generate unique IDs
+
+import chromadb
 import openai
+from chromadb.config import Settings
 from docx import Document
-from sklearn.feature_extraction.text import TfidfVectorizer
-import numpy as np
 from ordered_set import OrderedSet
+from sentence_transformers import SentenceTransformer
 
 system_prompt = "You are an assistant that analyzes the content of word files containing how-to guides. \
 These are general knowledge and onboarding documents. Your job is to answer questions from users and give them \
 itemized instructions whenever applicable. If you don't know the answer, just say so."
 
+
 class Chatbot:
     def __init__(self, word_files_path):
         self.word_files_path = word_files_path
-        self.knowledge_base = []  # Use a list to store learned information (content and filename)
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")  # For embeddings
+        self.knowledge_base = []  # Store (content, filename) for easy reference
+        self.client = chromadb.Client(Settings())
+        self.collection = self.client.create_collection("knowledge_base")
         self.load_word_files()
 
     def load_word_files(self):
@@ -25,33 +31,47 @@ class Chatbot:
                 self.process_document(doc, filename)
 
     def process_document(self, doc, filename):
-        # Process paragraphs
         for para in doc.paragraphs:
             self.learn(para.text, filename)
 
-        # Process tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     self.learn(cell.text, filename)
 
     def learn(self, text, filename):
-        # Store the text and filename in the knowledge base
-        if text:
-            self.knowledge_base.append((text, filename))
+        if text.strip():
+            embedding = (
+                self.model.encode(text, convert_to_tensor=True).cpu().numpy().tolist()
+            )
+            unique_id = str(uuid.uuid4())  # Generate a unique ID for each entry
+
+            # Add text and its embedding to the Chroma collection with a unique ID
+            self.collection.add(
+                documents=[text],
+                metadatas=[{"filename": filename}],
+                embeddings=[embedding],
+                ids=[unique_id],
+            )
 
     def get_response(self, question):
-        # Select relevant entries based on the question
-        relevant_entries, relevant_filenames = self.select_relevant_entries(question)
+        question_embedding = (
+            self.model.encode(question, convert_to_tensor=True).cpu().numpy().tolist()
+        )
+        relevant_entries, relevant_filenames = self.select_relevant_entries(
+            question_embedding
+        )
 
         # If no relevant entries are found but relevant filenames are present
         if not relevant_entries and relevant_filenames:
-            return ("I couldn't find a specific answer, but the following files may contain relevant information:", 
-                    relevant_filenames)
+            return (
+                "I couldn't find a specific answer, but the following files may contain relevant information:",
+                relevant_filenames,
+            )
 
         # If no relevant entries or filenames are found
         if not relevant_entries:
-            return "I'm here to help! Please ask a specific question.", []
+            return "I'm here to help! I couPlease ask a specific question.", []
 
         # Combine the relevant entries into a context string
         context = "\n".join(relevant_entries)
@@ -59,34 +79,40 @@ class Chatbot:
         # Call the OpenAI API with the context and the user's question
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{context}\n\nQuestion: {question}"}
-                ]
+                    {"role": "user", "content": f"{context}\n\nQuestion: {question}"},
+                ],
             )
             return response["choices"][0]["message"]["content"], relevant_filenames
         except Exception as e:
             return f"An error occurred: {str(e)}", []
 
-    def select_relevant_entries(self, question):
-        # Use TF-IDF to find the most relevant entries
-        vectorizer = TfidfVectorizer()
-        texts = [entry[0] for entry in self.knowledge_base]
-        vectors = vectorizer.fit_transform(texts + [question])
-        cosine_similarities = (vectors * vectors[-1].T).toarray()[:-1, -1]
+    def select_relevant_entries(self, question_embedding):
+        # Query Chroma for relevant entries
+        results = self.collection.query(
+            query_embeddings=[question_embedding],
+            n_results=5,  # Adjust the number of top results as needed
+        )
 
-        # Get indices of entries with cosine similarity above a certain threshold
-        threshold = 0.2  # Set an appropriate threshold for relevance
-        relevant_indices = [i for i, score in enumerate(cosine_similarities) if score > threshold]
+        # Filter based on relevance score
+        threshold = 0.8  # Define an appropriate relevance threshold
+        relevant_indices = [
+            i
+            for i, distance in enumerate(results["distances"][0])
+            if distance < threshold
+        ]
 
-        # If no entries are above the threshold, return empty lists
         if not relevant_indices:
             return [], []
 
-        # Get top relevant entries by cosine similarity
-        top_indices = np.argsort(cosine_similarities)[-20:]  # Adjust the number as needed
-        relevant_entries = [self.knowledge_base[i][0] for i in top_indices]
-        relevant_filenames = list(OrderedSet([self.knowledge_base[i][1] for i in top_indices]))
+        # Retrieve relevant entries and filenames
+        relevant_entries = [results["documents"][0][i] for i in relevant_indices]
+        relevant_filenames = list(
+            OrderedSet(
+                [results["metadatas"][0][i]["filename"] for i in relevant_indices]
+            )
+        )
 
         return relevant_entries, relevant_filenames

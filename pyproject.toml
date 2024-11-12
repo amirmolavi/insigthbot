@@ -19,6 +19,8 @@ docx = "~0.2.4"
 isort = "~5.13.2"
 scikit-learn = "~1.5.2"
 ordered-set = "^4.1.0"
+sentence-transformers = "~3.3.0"
+chromadb = "~0.5.18"
 
 
 [tool.poetry.group.dev.dependencies]

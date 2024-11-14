@@ -35,3 +35,6 @@ venv/
 # Miscellaneous
 .DS_Store
 Thumbs.db
+*.docx
+
+*.dotx

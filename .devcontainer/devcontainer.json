@@ -26,7 +26,8 @@
                 "DavidAnson.vscode-markdownlint",
                 "johnpapa.vscode-peacock",
                 "eamodio.gitlens",
-                "tamasfe.even-better-toml"
+                "tamasfe.even-better-toml",
+                "streetsidesoftware.code-spell-checker"
             ]
         }
     },

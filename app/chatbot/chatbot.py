@@ -2,9 +2,10 @@ __all__ = ["Chatbot"]
 
 import os
 import uuid  # Import uuid to generate unique IDs
+from dataclasses import dataclass
 
-import chromadb
 import openai
+from chromadb import Client
 from chromadb.config import Settings
 from docx import Document
 from ordered_set import OrderedSet
@@ -15,19 +16,20 @@ These are general knowledge and onboarding documents. Your job is to answer ques
 itemized instructions whenever applicable. If you don't know the answer, just say so."
 
 
+@dataclass
 class Chatbot:
-    def __init__(self, word_files_path):
-        self.word_files_path = word_files_path
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")  # For embeddings
-        self.knowledge_base = []  # Store (content, filename) for easy reference
-        self.client = chromadb.Client(Settings())
+    resources: str
+    model: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2")  # For embeddings
+    client: Client = Client(Settings())
+
+    def __post_init__(self):
         self.collection = self.client.create_collection("knowledge_base")
         self.load_word_files()
 
     def load_word_files(self):
-        for filename in os.listdir(self.word_files_path):
+        for filename in os.listdir(self.resources):
             if filename.endswith(".docx"):
-                doc = Document(os.path.join(self.word_files_path, filename))
+                doc = Document(os.path.join(self.resources, filename))
                 self.process_document(doc, filename)
 
     def process_document(self, doc, filename):
@@ -41,9 +43,7 @@ class Chatbot:
 
     def learn(self, text, filename):
         if text.strip():
-            embedding = (
-                self.model.encode(text, convert_to_tensor=True).cpu().numpy().tolist()
-            )
+            embedding = self.model.encode(text, convert_to_tensor=True).cpu().numpy().tolist()
             unique_id = str(uuid.uuid4())  # Generate a unique ID for each entry
 
             # Add text and its embedding to the Chroma collection with a unique ID
@@ -55,12 +55,8 @@ class Chatbot:
             )
 
     def get_response(self, question):
-        question_embedding = (
-            self.model.encode(question, convert_to_tensor=True).cpu().numpy().tolist()
-        )
-        relevant_entries, relevant_filenames = self.select_relevant_entries(
-            question_embedding
-        )
+        question_embedding = self.model.encode(question, convert_to_tensor=True).cpu().numpy().tolist()
+        relevant_entries, relevant_filenames = self.select_relevant_entries(question_embedding)
 
         # If no relevant entries are found but relevant filenames are present
         if not relevant_entries and relevant_filenames:
@@ -69,9 +65,11 @@ class Chatbot:
                 relevant_filenames,
             )
 
+        print(relevant_filenames)
+
         # If no relevant entries or filenames are found
         if not relevant_entries:
-            return "I'm here to help! I couPlease ask a specific question.", []
+            return "I'm here to help! Please ask a specific question.", []
 
         # Combine the relevant entries into a context string
         context = "\n".join(relevant_entries)
@@ -98,21 +96,13 @@ class Chatbot:
 
         # Filter based on relevance score
         threshold = 0.8  # Define an appropriate relevance threshold
-        relevant_indices = [
-            i
-            for i, distance in enumerate(results["distances"][0])
-            if distance < threshold
-        ]
+        relevant_indices = [i for i, distance in enumerate(results["distances"][0]) if distance < threshold]
 
         if not relevant_indices:
             return [], []
 
         # Retrieve relevant entries and filenames
         relevant_entries = [results["documents"][0][i] for i in relevant_indices]
-        relevant_filenames = list(
-            OrderedSet(
-                [results["metadatas"][0][i]["filename"] for i in relevant_indices]
-            )
-        )
+        relevant_filenames = list(OrderedSet([results["metadatas"][0][i]["filename"] for i in relevant_indices]))
 
         return relevant_entries, relevant_filenames
